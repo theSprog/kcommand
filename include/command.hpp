@@ -701,7 +701,7 @@ class Command : public Executable {
     template <typename... Args>
     static Command build(const std::string& template_str, Args&&... args) {
         std::string cmd = fmt::format(template_str, std::forward<Args>(args)...);
-        if (CommandAnalyzer::is_simple_command(cmd)) {
+        if (!CommandAnalyzer::is_simple_command(cmd)) {
             throw CommandExecException(fmt::format(
                 "Command::build(): detected shell operators in `{}`.\nUse Command::shell() if you really need a compound command.",
                 cmd));
