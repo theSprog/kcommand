@@ -263,56 +263,50 @@ inline std::vector<uint8_t> handle_fd(int fd, bool capture_enabled, const LineCa
 } // namespace detail
 
 namespace fmt {
-// 辅助函数：将参数转换为字符串
 template <typename T>
-std::string to_string(T&& value) {
+inline std::string to_string(T&& v) {
     std::ostringstream oss;
-    oss << std::forward<T>(value);
+    oss << std::forward<T>(v);
     return oss.str();
 }
 
-// “对函数模板，用重载几乎总是比显式特化更合适。” —— Herb Sutter
-inline std::string to_string(bool value) {
-    return value ? "true" : "false";
+inline std::string to_string(bool v) {
+    return v ? "true" : "false";
 }
 
-// 递归终止条件
-inline std::string format_impl(const std::string& format_str) {
-    return format_str;
-}
+template <typename... Args>
+std::string format(const std::string& fmt, Args&&... args) {
+    constexpr std::size_t N = sizeof...(Args);
+    std::array<std::string, N> a{{to_string(std::forward<Args>(args))...}};
 
-// 递归实现格式化
-template <typename T, typename... Args>
-std::string format_impl(const std::string& format_str, T&& first, Args&&... rest) {
-    size_t pos = format_str.find("{}");
-    if (pos == std::string::npos) {
-        // 没有找到占位符，直接返回
-        return format_str;
+    std::size_t total = fmt.size();
+    for (auto& s : a) {
+        total += s.size();
     }
 
-    // 替换第一个{}
-    std::string result = format_str.substr(0, pos) + to_string(std::forward<T>(first)) + format_str.substr(pos + 2);
+    std::string out;
+    out.reserve(total);
 
-    // 递归处理剩余参数
-    return format_impl(result, std::forward<Args>(rest)...);
+    std::size_t idx = 0;
+    for (std::size_t i = 0; i < fmt.size(); ++i) {
+        if (i + 1 < fmt.size() && fmt[i] == '{' && fmt[i + 1] == '}' && idx < N) {
+            out.append(a[idx++]);
+            ++i; // skip the '}'
+        } else {
+            out.push_back(fmt[i]);
+        }
+    }
+    return out;
 }
 
-// 主要的format函数
 template <typename... Args>
-std::string format(const std::string& format_str, Args&&... args) {
-    return format_impl(format_str, std::forward<Args>(args)...);
+inline void print(const std::string& fmt, Args&&... args) {
+    std::cout << format(fmt, std::forward<Args>(args)...);
 }
 
-// print函数，类似于现代fmt的print
 template <typename... Args>
-void print(const std::string& format_str, Args&&... args) {
-    std::cout << format(format_str, std::forward<Args>(args)...);
-}
-
-// println函数，自动添加换行
-template <typename... Args>
-void println(const std::string& format_str, Args&&... args) {
-    std::cout << format(format_str, std::forward<Args>(args)...) << std::endl;
+inline void println(const std::string& fmt, Args&&... args) {
+    std::cout << format(fmt, std::forward<Args>(args)...) << '\n';
 }
 } // namespace fmt
 
@@ -701,7 +695,7 @@ class Command : public Executable {
     template <typename... Args>
     static Command build(const std::string& template_str, Args&&... args) {
         std::string cmd = fmt::format(template_str, std::forward<Args>(args)...);
-        if (!CommandAnalyzer::is_simple_command(cmd)) {
+        if (! CommandAnalyzer::is_simple_command(cmd)) {
             throw CommandExecException(fmt::format(
                 "Command::build(): detected shell operators in `{}`.\nUse Command::shell() if you really need a compound command.",
                 cmd));
